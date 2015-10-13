@@ -15,6 +15,8 @@ profvis = (function() {
   profvis.render = function(el, message) {
     var prof = colToRows(message.prof);
     applyInterval(prof, message.interval);
+    var fileLineTimes = getFileLineTimes(prof, message.files);
+    insertTotalTimes(prof, fileLineTimes);
 
     var vis = {
       el: el,
@@ -22,7 +24,7 @@ profvis = (function() {
       prof: prof,
       files: message.files,
       collapse: message.collapse,
-      fileLineTimes: getFileLineTimes(prof, message.files),
+      fileLineTimes: fileLineTimes,
 
       // DOM elements
       codeTable: null,
@@ -97,7 +99,7 @@ profvis = (function() {
 
       rows.append("td")
         .attr("class", "time")
-        .text(function(d) { return (Math.round(d.sumTime * 100) / 100); });
+        .text(function(d) { return (Math.round(d.totalTime * 100) / 100); });
 
       rows.append("td")
         .attr("class", "timebar-cell")
@@ -153,6 +155,10 @@ profvis = (function() {
         .domain(yDomain)
         .range([(yDomain[1] - yDomain[0]) * stackHeight, 0]);
 
+      var color = d3.scale.linear()
+        .domain([0, d3.max(prof, function(d) { return d.totalTime; }) ])
+        .range(["#fff", "#f63"]);
+
       // Creat SVG objects ----------------------------------------------
       var wrapper = d3.select(el).append('div')
         .attr('class', 'profvis-flamegraph-inner');
@@ -178,7 +184,10 @@ profvis = (function() {
 
       var rects = cells.append("rect")
         .attr("class", "rect")
-        .classed("highlighted", function(d) { return d.filename !== null; });
+        .classed("highlighted", function(d) { return d.filename !== null; })
+        .style("fill", function(d) {
+          return color(d.totalTime);
+        });
 
       // Add CSS classes for highlighting cells with labels that match particular
       // regex patterns.
@@ -481,7 +490,7 @@ profvis = (function() {
           filename: filename,
           linenum: i + 1,
           content: lines[i],
-          sumTime: 0
+          totalTime: 0
         };
       }
 
@@ -496,19 +505,19 @@ profvis = (function() {
       .key(function(d) { return d.filename; })
       .key(function(d) { return d.linenum; })
       .rollup(function(leaves) {
-        var sumTime = leaves.reduce(function(sum, d) {
+        var totalTime = leaves.reduce(function(sum, d) {
             return sum + d.endTime - d.startTime;
           }, 0);
 
         return {
           filename: leaves[0].filename,
           linenum: leaves[0].linenum,
-          sumTime: sumTime
+          totalTime: totalTime
         };
       })
       .entries(prof);
 
-    // Insert the sumTimes into line content data
+    // Insert the totalTimes into line content data
     timeData.forEach(function(fileInfo) {
       // Find item in fileTimes that matches the file of this fileInfo object
       var fileLineData = fileLineTimes.filter(function(d) {
@@ -517,7 +526,7 @@ profvis = (function() {
 
       fileInfo.values.forEach(function(lineInfo) {
         lineInfo = lineInfo.values;
-        fileLineData[lineInfo.linenum - 1].sumTime = lineInfo.sumTime;
+        fileLineData[lineInfo.linenum - 1].totalTime = lineInfo.totalTime;
       });
     });
 
@@ -525,7 +534,7 @@ profvis = (function() {
     // Calculate proportional times, relative to the longest time in the data
     // set. Modifies data in place.
     var fileMaxTimes = fileLineTimes.map(function(lines) {
-      var lineTimes = lines.lineData.map(function(x) { return x.sumTime; });
+      var lineTimes = lines.lineData.map(function(x) { return x.totalTime; });
       return d3.max(lineTimes);
     });
 
@@ -533,7 +542,7 @@ profvis = (function() {
 
     fileLineTimes.map(function(lines) {
       lines.lineData.map(function(line) {
-        line.propTime = line.sumTime / maxTime;
+        line.propTime = line.totalTime / maxTime;
       });
     });
 
@@ -551,6 +560,26 @@ profvis = (function() {
     });
 
     return prof;
+  }
+
+
+  // Given profiling data and fileLineTimes with sum of time spent on each line,
+  // insert totalTime into profiling data. Modifies profiling data in place.
+  function insertTotalTimes(prof, fileLineTimes) {
+    // Caculate amount of time spent on each label
+    var funcTimes = {};
+    prof.map(function(sample) {
+      if (sample.label === "")
+        return;
+      if (funcTimes[sample.label] === undefined)
+        funcTimes[sample.label] = 0;
+
+      funcTimes[sample.label] += sample.endTime - sample.startTime;
+    });
+
+    prof.map(function(d) {
+      d.totalTime = funcTimes[d.label];
+    });
   }
 
 
@@ -659,7 +688,8 @@ profvis = (function() {
               label:     startLeaf.label,
               linenum:   startLeaf.linenum,
               startTime: startLeaf.startTime,
-              endTime:   lastLeaf.endTime
+              endTime:   lastLeaf.endTime,
+              totalTime: startLeaf.totalTime
             });
 
             startLeaf = leaf;
@@ -676,7 +706,8 @@ profvis = (function() {
           label:     startLeaf.label,
           linenum:   startLeaf.linenum,
           startTime: startLeaf.startTime,
-          endTime:   lastLeaf.endTime
+          endTime:   lastLeaf.endTime,
+          totalTime: startLeaf.totalTime
         });
 
         return newLeaves;
