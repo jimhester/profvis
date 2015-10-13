@@ -156,8 +156,16 @@ profvis = (function() {
         .range([(yDomain[1] - yDomain[0]) * stackHeight, 0]);
 
       var color = d3.scale.linear()
-        .domain([0, d3.max(prof, function(d) { return d.totalTime; }) ])
-        .range(["#fff", "#f63"]);
+        .domain([0, 127, 255, 383, 511, 639, 767, 895, 1023])
+        .range(["#F1A5B3",
+          "#9BE381",
+          "#67DAE0",
+          "#E7B468",
+          "#CBBCE5",
+          "#76E2B4",
+          "#D8DD62",
+          "#BFD48E",
+          "#AAD2D9"]);
 
       // Creat SVG objects ----------------------------------------------
       var wrapper = d3.select(el).append('div')
@@ -186,7 +194,7 @@ profvis = (function() {
         .attr("class", "rect")
         .classed("highlighted", function(d) { return d.filename !== null; })
         .style("fill", function(d) {
-          return color(d.totalTime);
+          return color(Math.abs(hashString(d.label) % 1024));
         });
 
       // Add CSS classes for highlighting cells with labels that match particular
@@ -774,6 +782,18 @@ profvis = (function() {
         f.apply(context, args);
       }, delay);
     };
+  }
+
+
+  function hashString(str) {
+    var hash = 0, i, chr, len;
+    if (str.length === 0) return hash;
+    for (i = 0, len = str.length; i < len; i++) {
+      chr   = str.charCodeAt(i);
+      hash  = ((hash << 5) - hash) + chr;
+      hash |= 0; // Convert to 32bit integer
+    }
+    return hash;
   }
 
 
