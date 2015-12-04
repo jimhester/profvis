@@ -14,3 +14,8 @@ dependencies:
     src: "htmlwidgets/lib/profvis"
     script: profvis.js
     stylesheet: profvis.css
+  - name: highlight
+    version: 9.0.0
+    src: "htmlwidgets/lib/highlight"
+    script: highlight.pack.js
+    stylesheet: default.css
